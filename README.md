@@ -1,6 +1,6 @@
 # ZX MIDI player
 MIDI Player for ZX Spectrum.
-[![screenshot](screenshot.png)](screenshot.png?raw=true)
+[![screenshot](screenshot.png)](screenshot.png)
 
 Quick demo video: https://www.youtube.com/watch?v=X_hX_dGmGeg
 
