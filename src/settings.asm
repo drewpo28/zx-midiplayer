@@ -12,7 +12,8 @@ divide      DB
 nemoide     DB
 smuc        DB
 extraram    DB
-_reserv     BLOCK 256-14, 0
+memory      DB          ; paging mode: 0=Auto 1=Pent128 2=Pent512 3=Pent1024 4=Profi1024 5=TSConf
+_reserv     BLOCK 256-15, 0
     ENDS
     assert settings_t == trdos_sector_size
 
@@ -93,6 +94,7 @@ settings_save:
 
 
 settings_apply:
+    call file_detect_memory                                   ; re-apply Memory paging mode (rebuilds var_file_pages)
     call input_init_kempston                                  ;
     jp disks_init                                             ;
 
@@ -111,7 +113,7 @@ settings_menu_save_cb:
     jr z, 1f                         ;
     ld a, LAYOYT_ERR_FE              ;
 1:  out (#fe), a                     ;
-    ret                              ;
+    jp file_detect_memory            ; re-apply Memory paging mode (tail-calls, rets via file_set_bank)
 
 
 ; IN  - DE - *settings_menuentry_t
@@ -162,6 +164,15 @@ settings_menuentry_output:
     DW str_shama.end
     DW str_neogs1053.end
     DW str_zxnext.end
+settings_menuentry_memory:
+    DB 6
+    DW var_settings.memory
+    DW str_mem_auto.end
+    DW str_mem_p128.end
+    DW str_mem_p512.end
+    DW str_mem_p1024.end
+    DW str_mem_profi.end
+    DW str_mem_tsconf.end
 settings_menuentry_divmmc:
     DB 2
     DW var_settings.divmmc
@@ -212,8 +223,9 @@ settings_menuentry_kempston:
     DW str_on.end
 
 settings_menu_entries:
-    menugen_t 11
+    menugen_t 12
     menugen_entry_t str_output       settings_menu_val_cb settings_menu_cb settings_menuentry_output
+    menugen_entry_t str_memory       settings_menu_val_cb settings_menu_cb settings_menuentry_memory
     menugen_entry_t str_kempston     settings_menu_val_cb settings_menu_cb settings_menuentry_kempston
     menugen_entry_t str_divmmc       settings_menu_val_cb settings_menu_cb settings_menuentry_divmmc
     menugen_entry_t str_zxmmc        settings_menu_val_cb settings_menu_cb settings_menuentry_zxmmc

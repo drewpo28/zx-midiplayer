@@ -37,8 +37,16 @@ var_disks disks_t
 var_disk disk_t
 var_fatfs fatfs_state_t
 var_current_file_number DW 0
-var_current_file_size DW 0
+var_current_file_size DD 0                ; widened to 32-bit for files > 64 KB
 var_current_file_name BLOCK 13, 0
+
+; --- Large MIDI support (>64KB) ---
+var_file_pos_hi BYTE 0                    ; bits 16..19 of the current file position in HL
+var_profi_mode BYTE 0                     ; paging mode: 0 = Pentagon (#7FFD), 1 = Profi (#7FFD + #DFFD groups), 2 = TS-Conf (Page3 #13AF)
+var_file_pages_count BYTE 4               ; valid entries in var_file_pages (set by file_detect_memory)
+var_probe_val BYTE 0                      ; scratch used by file_detect_memory
+    align 64                              ; so var_file_pages[0..63] never crosses a 256-byte page
+var_file_pages BLOCK FILE_PAGES_MAX, 0    ; #7FFD values mapping file bank index -> physical bank
 
 var_settings settings_t
 var_settings_sector DW 0

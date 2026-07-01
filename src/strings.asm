@@ -4,7 +4,7 @@
     ENDM
 
 str_head:        DEFSTR "ZX MIDI player by Eugene Lozovoy"
-str_version:     DEFSTR VERSIONSHORT_DEF
+str_version:     DEFSTR "v3byDrew"
 str_3_5_mhz:     DEFSTR "3.5MHz"
 str_3_54_mhz:    DEFSTR "3.54MHz"
 str_7_mhz:       DEFSTR "7MHz"
@@ -39,6 +39,15 @@ str_smuc:        DEFSTR "SMUC"
 str_on:          DEFSTR "  ON"
 str_off:         DEFSTR "     OFF"
 str_auto:        DEFSTR "AUTO"
+
+str_memory:      DEFSTR "Memory"
+str_mem_auto:    DEFSTR "        Auto"
+str_mem_p128:    DEFSTR "    Pent 128"
+str_mem_p512:    DEFSTR "    Pent 512"
+str_mem_p1024:   DEFSTR "   Pent 1024"
+str_mem_profi:   DEFSTR "  Profi 1024"
+str_mem_tsconf:  DEFSTR "     TS Conf"
+
 str_kempston:    DEFSTR "Kempston"
 str_extraram:    DEFSTR "Extra RAM"
 str_pentagon:    DEFSTR "Pentagon"
