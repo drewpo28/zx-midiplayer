@@ -253,7 +253,7 @@ trdos_file_menu_generator:
     jr z, .noentry            ; ...
     inc a                     ; ...
     jr z, .noentry            ; ...
-    ld de, tmp_menu_string+2  ;
+    ld de, tmp_menu_string+1  ; name right after the icon (no separator space)
 .name:
     ld bc, 8                  ;
     ldir                      ;
@@ -301,8 +301,6 @@ trdos_file_menu_generator:
     call disks_get_icon_by_extension ; A = icon
     ld ix, tmp_menu_string    ;
     ld (ix), a                ;
-    ld a, ' '                 ; space
-    ld (ix+1), a              ;
     xor a                     ; set Z flag
     ret                       ;
 .noentry:
@@ -342,12 +340,16 @@ trdos_file_load:
     ldir                                    ; ...
     ld b, (hl) : inc hl                     ; file size in bytes
     ld c, (hl) : inc hl                     ; ...
-    ld (var_current_file_size), bc          ; ...
+    ld (var_current_file_size+0), bc        ; ...
+    xor a                                   ; ... TR-DOS files are <= 64KB: clear high size bytes
+    ld (var_current_file_size+2), a         ; ... (may be stale from a previous FAT load)
+    ld (var_current_file_size+3), a         ; ...
     ld b, (hl) : inc hl                     ; sectors count
     ld e, (hl) : inc hl                     ; sector n
     ld d, (hl) : inc hl                     ; track n
     ld c, trdos_fun_read_block              ;
-    ld hl, 0                                ; HL = current_file_position
+    ld hl, 0                                ; HL = current_file_position (low 16)
+    ld (var_file_pos_hi), a                 ; ... bits 16..19 = 0 (A still 0)
 .loop:
     push hl                                 ;
     push bc                                 ;
@@ -372,7 +374,9 @@ trdos_file_load:
     ld a, high file_page_size               ; current_file_position += page_size
     add a, h                                ; ...
     ld h, a                                 ; ...
-    ld de, (trdos_var_next_sector)          ;
+    jr nc, 2f                               ; ... carry into bits 16..19 on 64 KB crossing (defensive)
+    ld a, (var_file_pos_hi) : inc a : ld (var_file_pos_hi), a ;
+2:  ld de, (trdos_var_next_sector)          ;
     jr .loop                                ;
 .exit:
     xor a                                   ; set Z flag

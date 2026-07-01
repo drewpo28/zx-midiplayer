@@ -411,6 +411,21 @@ print_hex_4     ld a, (ix) : inc ix: call print_hex
 print_hex_2     ld a, (ix) : inc ix
     ; fall through to print_hex ...
 
+; Print the low nibble of A as one hex digit
+; IN  -  A - value (only low nibble is printed)
+; IN  - HL - screen address to print character at
+; OUT - HL - next screen address
+; OUT - AF - garbage
+print_nibble:
+    and #0f             ;
+    add a, #90          ;
+    daa                 ;
+    adc a, #40          ;
+    daa                 ;
+    call print_char     ;
+    inc l               ; move right one space
+    ret                 ;
+
 ; Print a single HEX/BCD value
 ; IN  -  A - character to print
 ; IN  - HL - screen address to print character at
