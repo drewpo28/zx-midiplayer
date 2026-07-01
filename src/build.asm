@@ -7,7 +7,11 @@
     includelua "lua/incbin_rle.lua"
 
 
-; === SNA file ===
+; === SNA / TAP files ===
+; These packers assume the code fits in a single 16 KB page. The >64 KB MIDI
+; support pushes the code past 16 KB, so build them only when it still fits;
+; otherwise skip (the TRD below is the canonical output and is unaffected).
+    IF (end - begin) <= 0x4000
     page screens_page
     org screens_base
     lua allpass
@@ -28,6 +32,9 @@
 ; === TAP file ===
     emptytap "main.tap"
     page 0 : savetap "main.tap", main
+    ELSE
+    DISPLAY "Code > 16KB: skipping .sna/.tap (single-page packers); .trd is built normally"
+    ENDIF
 
 
 ; === TRD file ===

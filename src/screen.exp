@@ -1,0 +1,9 @@
+screens_base: EQU 0x0000C000
+screens_page: EQU 0x00000007
+begin: EQU 0x000076D1
+end: EQU 0x0000B8A1
+main: EQU 0x0000AF05
+stack_top: EQU 0x0000BFFF
+var_trdos_present: EQU 0x0000B646
+var_settings_sector: EQU 0x0000B880
+settings_magic: EQU 0x7A786D69

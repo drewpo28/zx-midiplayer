@@ -101,6 +101,7 @@ vis_process_command:
 .note_on:
     push bc                                      ;
     push hl                                      ;
+    ld a, (var_file_pos_hi) : push af            ; preserve 20-bit position (restored with HL below)
     call file_get_next_byte                      ; C = note number
     and #7f                                      ; ...
     ld c, a                                      ; ...
@@ -125,6 +126,7 @@ vis_process_command:
     add hl, bc                                   ; ...
     srl d : srl d                                ; velocity = [0..31] - 4*8=32 lines
     ld (hl), d                                   ; target = velocity
+    pop af : ld (var_file_pos_hi), a             ; restore 20-bit position hi to match HL
     pop hl                                       ;
     pop bc                                       ;
     ld a, e                                      ;
@@ -132,10 +134,12 @@ vis_process_command:
 .note_off:
     push bc                                      ;
     push hl                                      ;
+    ld a, (var_file_pos_hi) : push af            ; preserve 20-bit position (restored with HL below)
     call file_get_next_byte                      ; IXH = note number
     ld c, a                                      ;
     xor a                                        ; velocity = 0
     call vis_process_key                         ;
+    pop af : ld (var_file_pos_hi), a             ; restore 20-bit position hi to match HL
     pop hl                                       ;
     pop bc                                       ;
     ld a, e                                      ;

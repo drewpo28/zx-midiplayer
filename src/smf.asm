@@ -33,6 +33,7 @@ ticks_per_int_fraction WORD
 ticks                  DWORD
 ticks_fraction         WORD
 bytes_left             WORD
+bytes_left_hi          BYTE     ; bits 16..23 of bytes_left (>64KB countdown support)
 tracks                 BLOCK SMF_MAX_TRACKS*smf_track_t
 _zerobyte              BYTE 0   ; this is read by smf_get_next_track and written by smf_parse (flags=0)
     ENDS
@@ -41,7 +42,9 @@ _zerobyte              BYTE 0   ; this is read by smf_get_next_track and written
 flags             BYTE
 last_status       BYTE
 end               WORD
+end_hi            BYTE     ; bits 16..19 of end position (>64KB support)
 position          WORD
+position_hi       BYTE     ; bits 16..19 of read position (>64KB support)
 next_tick         DWORD
     ENDS
 
@@ -116,22 +119,29 @@ smf_parse_track_header:
     call file_get_next_byte : cp 'T' : ret nz                  ; chunk_header_t.id+1
     call file_get_next_byte : cp 'r' : ret nz                  ; chunk_header_t.id+2
     call file_get_next_byte : cp 'k' : ret nz                  ; chunk_header_t.id+3
-    call file_get_next_byte : cp 0 : ret nz                    ; chunk_header_t.len+0
-    call file_get_next_byte : cp 0 : ret nz                    ; chunk_header_t.len+1
-    call file_get_next_byte : ld b, a                          ; chunk_header_t.len+2
-    ld d, b : call file_get_next_byte : ld b, d : ld c, a      ; chunk_header_t.len+3
-    ld (iy+smf_track_t.position+0), l                          ; save position to begin of track data
+    call file_get_next_byte : cp 0 : ret nz                    ; chunk_header_t.len+0 (must be 0; >16MB unsupported)
+    call file_get_next_byte : ld e, a                          ; chunk_header_t.len+1 -> E = len bits 16..23 (DE survives file_get_next_byte)
+    call file_get_next_byte : ld d, a                          ; chunk_header_t.len+2 -> D = len bits 8..15 (file_get_next_byte clobbers BC, NOT DE)
+    call file_get_next_byte : ld c, a                          ; chunk_header_t.len+3 -> C = len bits 0..7
+    ld b, d                                                    ; BC = len low 16 (bits 8..0)
+    ld (iy+smf_track_t.position+0), l                          ; save 20-bit position to begin of track data
     ld (iy+smf_track_t.position+1), h                          ; ...
-    add hl, bc                                                 ; save position to end of track data
+    ld a, (var_file_pos_hi)                                    ; ...
+    ld (iy+smf_track_t.position+2), a                          ; ...
+    add hl, bc                                                 ; end = position + len (24-bit)
     ld (iy+smf_track_t.end+0), l                               ; ...
     ld (iy+smf_track_t.end+1), h                               ; ...
-    jr nc, 1f                                                  ; check if track is bigger than file
-    or 1                                                       ; ... if yes - reset Z flag
-    ret                                                        ; ... and exit
-1:  push hl                                                    ; bytes_left += len
-    ld hl, (var_smf_file.bytes_left)                           ; ...
+    ld a, (var_file_pos_hi)                                    ; end_hi = pos_hi + len_hi + carry
+    adc a, e                                                   ; ...
+    ld (iy+smf_track_t.end+2), a                               ; ...
+    ld (var_file_pos_hi), a                                    ; advance parse position (HL already = end low16) to next track
+    push hl                                                    ; bytes_left += len (24-bit)
+    ld hl, (var_smf_file.bytes_left)                           ; ... low 16
     add hl, bc                                                 ; ...
     ld (var_smf_file.bytes_left), hl                           ; ...
+    ld a, (var_smf_file.bytes_left_hi)                         ; ... hi += len bits 16..23 + carry
+    adc a, e                                                   ; ... (E = len bits 16..23, still valid here)
+    ld (var_smf_file.bytes_left_hi), a                         ; ...
     pop hl                                                     ; ...
     ld a, (1<<SMF_TRACK_FLAGS_VALID)|(1<<SMF_TRACK_FLAGS_PLAY) ; set track flags
     ld (iy+smf_track_t.flags), a                               ; ...
@@ -154,6 +164,7 @@ smf_parse:
     ld bc, (SMF_DEFAULT_TEMPO>> 0)&0xFFFF : ld (var_smf_file.tempo+0), bc ; set default tempo
     ld bc, (SMF_DEFAULT_TEMPO>>16)&0xFFFF : ld (var_smf_file.tempo+2), bc ; ...
     ld hl, 0                              ; parse file header
+    xor a : ld (var_file_pos_hi), a       ; ... start at position 0 (20-bit)
     call smf_parse_file_header_rmi        ; ... skip rmi header if present
     call smf_parse_file_header            ; ...
     ret nz                                ; ... return on error
@@ -166,6 +177,7 @@ smf_parse:
     ld (var_smf_file.ticks_fraction+1), a ;
     ld (var_smf_file.bytes_left+0), a     ;
     ld (var_smf_file.bytes_left+1), a     ;
+    ld (var_smf_file.bytes_left_hi), a    ; bits 16..23 (>64KB countdown)
     ld a, (var_smf_file.num_tracks)       ; parse each track header
     ld ixl, a                             ; ...
     ld iy, var_smf_file.tracks            ; ...
@@ -207,16 +219,25 @@ smf_get_first_track:
 ; OUT - AF - garbage
 ; OUT - DE - garbage
 smf_get_next_track:
-    ld e, (iy+smf_track_t.position+0) ; DE = old_position
+    ld e, (iy+smf_track_t.position+0) ; DE = old_position low 16
     ld d, (iy+smf_track_t.position+1) ; ...
-    ld (iy+smf_track_t.position+0), l ; IY->track_position = HL (current_position)
+    ld c, (iy+smf_track_t.position+2) ; C  = old_position hi (bits 16..19)
+    ld (iy+smf_track_t.position+0), l ; IY->track_position = HL+hi (current 20-bit position)
     ld (iy+smf_track_t.position+1), h ; ...
-    xor a                             ; bytes_left -= current_position - old_position
-    sbc hl, de                        ; ...
-    ex hl, de                         ; ...
-    ld hl, (var_smf_file.bytes_left)  ; ...
-    sbc hl, de                        ; ...
+    ld a, (var_file_pos_hi)           ; A = current hi
+    ld (iy+smf_track_t.position+2), a ; ...
+    and a                             ; delta = current - old (24-bit; bytes consumed this step)
+    sbc hl, de                        ; HL = current_low16 - old_low16 ; CY = borrow
+    sbc a, c                          ; A  = current_hi - old_hi - borrow = delta_hi
+    ex de, hl                         ; DE = delta low 16 (A still = delta_hi)
+    ld c, a                           ; C  = delta_hi
+    ld hl, (var_smf_file.bytes_left)  ; bytes_left -= delta (24-bit countdown, display only)
+    and a                             ; ...
+    sbc hl, de                        ; ... low 16
     ld (var_smf_file.bytes_left), hl  ; ...
+    ld a, (var_smf_file.bytes_left_hi); ...
+    sbc a, c                          ; ... hi - delta_hi - borrow
+    ld (var_smf_file.bytes_left_hi), a; ...
 .entry:
     ld de, smf_track_t                ;
 .next_track:
@@ -226,8 +247,10 @@ smf_get_next_track:
     ret z                             ; ...
     bit SMF_TRACK_FLAGS_PLAY, a       ; if (!track_play) check next track
     jr z, .next_track                 ; ...
-    ld l, (iy+smf_track_t.position+0) ; HL = IY->track_position
+    ld l, (iy+smf_track_t.position+0) ; HL+hi = IY->track_position (20-bit)
     ld h, (iy+smf_track_t.position+1) ; ...
+    ld a, (iy+smf_track_t.position+2) ; ...
+    ld (var_file_pos_hi), a           ; ...
     ret                               ;
 
 
@@ -338,20 +361,27 @@ smf_get_next_status:
     call file_get_next_byte                   ; A = byte
     bit 7, a                                  ; if this isn't status byte - reuse last one ("Running Status")
     jr nz, .is_meta_event                     ; ...
-    ld a, (iy+smf_track_t.last_status)        ; ...
-    dec hl                                    ; ...
+    ld a, h : or l                            ; rewind position by 1 (20-bit): borrow into hi if HL wraps
+    jr nz, 1f                                 ; ...
+    ld a, (var_file_pos_hi) : dec a : ld (var_file_pos_hi), a ; ...
+1:  dec hl                                    ; ...
+    ld a, (iy+smf_track_t.last_status)        ; reuse last status
 .is_meta_event:
     cp #ff                                    ; A == 0xFF?
     jr nz, .is_sysex                          ; ... no
-    push hl                                   ; save HL (next track position)
+    ld a, (var_file_pos_hi)                   ; save position hi (restored with HL below)
+    push af                                   ; ...
+    push hl                                   ; save HL (position at cc)
     inc hl                                    ; "FF cc ll... dd..." - cc - command, ll - length, dd - data
-    call smf_parse_varint                     ; DEBC = ll - length of dd, HL = next track position (pointing to dd)
-    pop de                                    ; DE = prev track position ;XXX assume length is always <= 0xffff
+    call smf_parse_varint                     ; DEBC = ll - length of dd, HL = position pointing to dd
+    pop de                                    ; DE = position at cc ;XXX assume cc+ll length <= 0xffff
     or a                                      ; reset C flag
     sbc hl, de                                ; get length of cc and ll (HL = HL - DE - C flag)
     add hl, bc                                ; sum length of cc/ll and dd
     ld b, h : ld c, l                         ; BC = total data len
-    ex hl, de                                 ; restore HL (next track position)
+    ex hl, de                                 ; restore HL (position at cc)
+    pop af                                    ; restore position hi to match HL
+    ld (var_file_pos_hi), a                   ; ...
     ld a, #ff                                 ; restore status byte = 0xFF
     ret                                       ;
 .is_sysex:
@@ -416,15 +446,16 @@ smf_process_track:
     call smf_get_next_status                          ;
     or a                                              ; set Z flag if command is 0 (aka not valid)
     ret                                               ;
-.check_end_of_track:
-    ex hl, de                                         ; check if end of track reached
-    ld l, (iy+smf_track_t.end+0)                      ; ...
-    ld h, (iy+smf_track_t.end+1)                      ; ...
-    or a                                              ; clear C flag
-    sbc hl, de                                        ; if (HL==DE) Z=1,C=0; if (HL<DE) Z=0,C=1; if (HL>DE) Z=0,C=0
-    ex hl, de                                         ; ...
-    jr z, .end_of_track                               ; ...
-    jr c, .end_of_track                               ; ...
+.check_end_of_track:                                  ; reached end of track? (20-bit position >= end), HL preserved
+    ld a, (var_file_pos_hi)                           ; ...
+    cp (iy+smf_track_t.end+2)                          ; pos_hi vs end_hi
+    jr c, .set_delay                                  ; ... pos_hi < end_hi -> not yet
+    jr nz, .end_of_track                              ; ... pos_hi > end_hi -> past end
+    ld a, l                                           ; equal hi: compare low 16 (pos - end)
+    sub (iy+smf_track_t.end+0)                          ; ...
+    ld a, h                                           ; ...
+    sbc (iy+smf_track_t.end+1)                          ; ... C set iff pos < end
+    jr nc, .end_of_track                              ; ... pos >= end -> end of track
 .set_delay:
     call smf_parse_varint                             ; DEBC = time delta (ticks count)
     ld a, b : or c : or d : or e                      ; check if delay == 0
@@ -476,7 +507,7 @@ smf_handle_meta:
     ld a, e                      ; ...
     cp 4                         ; ...
     jr nz, .exit                 ; ...
-    inc hl                       ; skip ll
+    call file_get_next_byte      ; skip ll (advances 20-bit position safely)
     dec de                       ; ...
     call file_get_next_byte      ; tempo = tt tt tt
     dec de                       ; ...
@@ -496,14 +527,22 @@ smf_handle_meta:
 .title:
     cp #03                       ; track title
     jr nz, .exit                 ; ...
-    inc hl                       ; skip ll
+    call file_get_next_byte      ; skip ll (advances 20-bit position safely)
     dec de                       ; ...
+    ld a, (var_file_pos_hi)      ; save title-start hi (HL is restored by push/pop below)
+    push af                      ; ...
     push de                      ;
     push hl                      ;
-    call player_set_title        ;
+    call player_set_title        ; advances HL+hi (discarded)
     pop hl                       ;
     pop de                       ;
+    pop af                       ; restore hi to match the restored HL
+    ld (var_file_pos_hi), a      ; ...
     ; jp .exit                     ;
 .exit:
-    add hl, de                   ; next position += remaining data len
+    add hl, de                   ; next position += remaining data len (20-bit)
+    ret nc                       ; ...
+    ld a, (var_file_pos_hi)      ; ... carry into bits 16..19 on 64 KB crossing
+    inc a                        ; ...
+    ld (var_file_pos_hi), a      ; ...
     ret                          ;

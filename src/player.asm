@@ -74,6 +74,7 @@ player_loop:
     ld (var_player_state.minutes_h), a        ;
 .init:
     ld hl, 0                       ;
+    xor a : ld (var_file_pos_hi), a; 20-bit position starts at 0
     call file_switch_page          ;
     call player_driver_select      ;
     call player_reset_chip         ;
@@ -226,12 +227,30 @@ player_set_title:
     LD_SCREEN_ADDRESS de, LAYOUT_TITLE       ;
 .printloop:
     call file_get_next_byte                  ; A = char
-    cp 32                                    ; if (char < 32 ' ' || char > 126 '~') - non printable
-    jr c, 1f                                 ; ...
-    cp 126+1                                 ; ...
-    jr c, 2f                                 ; ...
-1:  ld a, udg_nonprintable                   ; ...
-2:  ex de, hl                                ;
+    cp 32                                    ; char < 32 -> non printable
+    jr c, .nonprint                          ; ...
+    cp 126+1                                 ; char 32..126 -> printable ASCII as-is
+    jr c, .emit                              ; ...
+    cp #c0                                   ; char 0xC0..0xFF -> CP1251 Cyrillic -> transliterate
+    jr nc, .translit                         ; ...
+    cp #a8 : jr z, .yo_up                     ; Ё -> 'E'
+    cp #b8 : jr z, .yo_lo                     ; ё -> 'e'
+.nonprint:
+    ld a, udg_nonprintable                   ;
+    jr .emit                                 ;
+.yo_up:
+    ld a, 'E' : jr .emit                      ;
+.yo_lo:
+    ld a, 'e' : jr .emit                      ;
+.translit:
+    push hl                                  ; CP1251 Cyrillic -> Latin (HL = file pos, preserve)
+    ld hl, translit_cp1251 - #c0             ;
+    ld b, 0 : ld c, a                        ;
+    add hl, bc                               ;
+    ld a, (hl)                               ;
+    pop hl                                   ;
+.emit:
+    ex de, hl                                ;
     push de                                  ;
     call print_char                          ;
     pop de                                   ;
@@ -255,6 +274,12 @@ player_set_title:
     ex de, hl                                ; otherwise print elipsis at last position
     ld a, udg_ellipsis                       ; ...
     jp print_char                            ; ...
+
+; CP1251 Cyrillic (0xC0..0xFF) -> single Latin char transliteration (display only)
+; А..Щ Ъ Ы Ь Э Ю Я   then   а..щ ъ ы ь э ю я
+translit_cp1251:
+    db "ABVGDEJZIYKLMNOPRSTUFHCCWW Y EUQ"    ; 0xC0..0xDF
+    db "abvgdejziyklmnoprstufhccww y euq"    ; 0xE0..0xFF
 
 
 ; IN  - A  - tracks value
@@ -312,16 +337,19 @@ player_set_filename:
     inc l                                                     ; ...
     jr .fill_tail_with_spaces                                 ; ...
 
-; IN  - IX  - size value
+; Draw the BYTES field: the 24-bit bytes-left countdown as 5 hex digits ($XXXXX,
+; up to ~1 MB). Reads var_smf_file.bytes_left directly (no input register).
 ; OUT - AF  - garbage
 ; OUT - BC  - garbage
 ; OUT - DE  - garbage
 ; OUT - HL  - garbage
 player_set_size:
     LD_SCREEN_ADDRESS hl, LAYOUT_SIZE    ;
-    ld a, ixh                            ;
+    ld a, (var_smf_file.bytes_left_hi)   ; bits 16..19 (1 digit; countdown capped at ~1 MB)
+    call print_nibble                    ;
+    ld a, (var_smf_file.bytes_left+1)    ; bits 8..15
     call print_hex                       ;
-    ld a, ixl                            ;
+    ld a, (var_smf_file.bytes_left+0)    ; bits 0..7
     jp print_hex                         ;
 
 
