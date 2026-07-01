@@ -4,7 +4,7 @@
     ENDM
 
 str_head:        DEFSTR "ZX MIDI player by Eugene Lozovoy"
-str_version:     DEFSTR "v3byDrew"
+str_version:     DEFSTR VERSIONSHORT_DEF
 str_3_5_mhz:     DEFSTR "3.5MHz"
 str_3_54_mhz:    DEFSTR "3.54MHz"
 str_7_mhz:       DEFSTR "7MHz"
