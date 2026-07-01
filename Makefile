@@ -5,7 +5,14 @@ endif
 
 export PATH:=/cygdrive/c/Hwdev/sjasmplus/:/cygdrive/e/Emulation/ZX Spectrum/Emuls/Es.Pectrum/:${PATH}
 
-SJOPTS = --nologo --fullpath --outprefix=build/ -DVERSION_DEF=\"${VERSION}\" -DVERSIONSHORT_DEF=\"${VERSIONSHORT}\"
+# Set MEM=1024 to enable full Pentagon 1024SL support (extra 512KB via #7FFD bit5,
+# unlocked through #EFF7). Without it the binary still auto-detects 128K/512K at
+# runtime and supports MIDI files up to the detected RAM (64KB on 128K, ~448KB on 512K).
+ifeq (${MEM},1024)
+	MEMDEF := -DPENTAGON_1024
+endif
+
+SJOPTS = --nologo --fullpath --outprefix=build/ -DVERSION_DEF=\"${VERSION}\" -DVERSIONSHORT_DEF=\"${VERSIONSHORT}\" ${MEMDEF}
 
 .PHONY: all clean run
 

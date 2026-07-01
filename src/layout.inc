@@ -23,7 +23,7 @@ LAYOUT_RIGHTMENU_X             equ 11
 LAYOUT_RIGHTMENU_Y             equ 2
 LAYOUT_RIGHTMENU_LINES         equ 20
 LAYOUT_RIGHTMENU_COLUMNS       equ 20
-LAYOUT_BARS_X                  equ 64
+LAYOUT_BARS_X                  equ 72
 LAYOUT_BARS_Y                  equ 64
 LAYOUT_BARS_N                  equ 16
 LAYOUT_BARS_HEIGHT             equ 8*8

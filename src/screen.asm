@@ -14,6 +14,7 @@ screen_help_ptr equ #C006
 ; OUT - DE - garbage
 ; OUT - HL - garbage
 screen_load:
+    call file_page_reset                      ; Profi: select page group 0 for the paging below
     ld a, #10 + screens_page                  ;
     ld bc, #7ffd                              ;
     out (c), a                                ;
