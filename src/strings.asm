@@ -47,6 +47,8 @@ str_mem_p512:    DEFSTR "    Pent 512"
 str_mem_p1024:   DEFSTR "   Pent 1024"
 str_mem_profi:   DEFSTR "  Profi 1024"
 str_mem_tsconf:  DEFSTR "     TS Conf"
+str_mem_p256:    DEFSTR "    Pent 256"
+str_mem_scorp:   DEFSTR "   Scorp 256"
 
 str_kempston:    DEFSTR "Kempston"
 str_extraram:    DEFSTR "Extra RAM"
