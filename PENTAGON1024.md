@@ -21,9 +21,15 @@ This version:
   `var_file_pages` bank table by probing physical banks 8.. upward. One binary
   adapts itself:
   - **Pentagon 128** — no extra banks found → 64 KB cap (unchanged behaviour).
+  - **Pentagon 256** — banks 8..15 (via `#7FFD` bit 6) → ~192 KB.
   - **Pentagon 512** — banks 8..31 (via `#7FFD` bits 6,7) → ~448 KB.
   - **Pentagon 1024** — banks 32..63 (via `#7FFD` bit 5, unlocked through
     `#EFF7`) → ~960 KB. Requires the `MEM=1024` build (see below).
+  - **Scorpion ZS-256** — banks 8..15 (via `#1FFD` bit 4 + `#7FFD` low bits)
+    → ~192 KB. Probed only if no Pentagon/Profi extended banks were found.
+- The paging scheme can also be forced in **Settings → Memory**
+  (`Auto` / `Pent 128` / `Pent 512` / `Pent 1024` / `Profi 1024` / `TS Conf` /
+  `Pent 256` / `Scorp 256`) — useful when auto-detection misfires on a clone.
 - Files that do not fit the detected RAM are rejected at load time instead of
   corrupting memory.
 
