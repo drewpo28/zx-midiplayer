@@ -224,17 +224,17 @@ file_detect_memory:
     or a : jr z, .auto               ; ... Auto: probe/detect below
     dec a : jp z, .done              ; 1 = Pent 128: base 4 banks (64 KB) only
     dec a : jr z, .force256          ; 2 = Pent 256: mode 0 already; D6 banks 8..15
-    dec a : jr z, .force512          ; 3 = Pent 512: D6/D7 banks 8..31
-    dec a : jr z, .force_ext         ; 4 = Pent 1024: mode 0 already; D5 banks 8..63
-    dec a : jr z, .force_profi       ; 5 = Profi 1024 (#DFFD page groups)
-    dec a : jr z, .force_ts          ; 6 = TS-Conf (Page3 #13AF)
-    ld a, 3 : ld (var_profi_mode), a ; 7 = Scorp 256 (#7FFD + #1FFD bit4)
+    dec a : jr z, .force_scorp       ; 3 = Scorp 256 (#7FFD + #1FFD bit4)
+    dec a : jr z, .force512          ; 4 = Pent 512: D6/D7 banks 8..31
+    dec a : jr z, .force_ext         ; 5 = Pent 1024: mode 0 already; D5 banks 8..63
+    dec a : jr z, .force_profi       ; 6 = Profi 1024 (#DFFD page groups)
+    ld a, 2 : ld (var_profi_mode), a ; 7 = TS-Conf (Page3 #13AF)
+    jr .force_ext                    ;
+.force_scorp:
+    ld a, 3 : ld (var_profi_mode), a ;
     jr .force256                     ;
 .force_profi:
     ld a, 1 : ld (var_profi_mode), a ;
-    jr .force_ext                    ;
-.force_ts:
-    ld a, 2 : ld (var_profi_mode), a ;
 .force_ext:                          ; forced: probe extended banks/pages 8..63 in the chosen mode
     ld c, 8                          ;
 .fe_loop:

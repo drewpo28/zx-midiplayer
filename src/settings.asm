@@ -12,7 +12,7 @@ divide      DB
 nemoide     DB
 smuc        DB
 extraram    DB
-memory      DB          ; paging mode: 0=Auto 1=Pent128 2=Pent256 3=Pent512 4=Pent1024 5=Profi1024 6=TSConf 7=Scorp256
+memory      DB          ; paging mode: 0=Auto 1=Pent128 2=Pent256 3=Scorp256 4=Pent512 5=Pent1024 6=Profi1024 7=TSConf
 _reserv     BLOCK 256-15, 0
     ENDS
     assert settings_t == trdos_sector_size
@@ -170,11 +170,11 @@ settings_menuentry_memory:
     DW str_mem_auto.end
     DW str_mem_p128.end
     DW str_mem_p256.end
+    DW str_mem_scorp.end
     DW str_mem_p512.end
     DW str_mem_p1024.end
     DW str_mem_profi.end
     DW str_mem_tsconf.end
-    DW str_mem_scorp.end
 settings_menuentry_divmmc:
     DB 2
     DW var_settings.divmmc
