@@ -248,9 +248,25 @@ playlist_next:
     call input_simulate_keypress     ; ...
     jp menu_handle_input             ; ...
 .no_more_entries:
-    xor a                            ;
-    ld (var_playlist_flag), a        ;
-    ret                              ;
+;--- my loop -------------------------
+
+    ld a, (var_settings.ploop)   ;
+    cp 1                            ; var_settings.ploop == 1 - on
+    jr c, .no                       ; var_settings.ploop == 0 - off
+    jr nz, .yes                     ; 
+
+.yes:    
+    ld a,1                           ; set blue border
+    out (#fe), a
+    call menu_init
+    call menu_draw
+    ret
+    
+;--- original ------------------------
+.no: 
+	xor a                            ; orig
+    ld (var_playlist_flag), a        ; orig
+    ret                              ;                              ;
 
 playlist_prev:
     ld b, PLAYLIST_DELAY             ; just cosmetic delay

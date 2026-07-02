@@ -123,10 +123,19 @@ boot_b_end:
     block 256-$, 0
     savetrd "main.trd", &"boot.B", 0, $
 
-    lua allpass
-        for file_name in io.popen([[ls "res/midi/"]]):lines() do
-            _pc("org 0")
-            _pc(string.format("incbin \"res/midi/%s\"", file_name))
-            _pc(string.format("savetrd \"main.trd\", \"%s\", 0, $", file_name))
-        end
-    endlua
+   lua allpass
+    local cmd
+    if package.config:sub(1,1) == "\\" then
+        -- Windows
+        cmd = [[dir "res\midi" /b]]
+    else
+        -- Linux / macOS
+        cmd = [[ls "res/midi/"]]
+    end
+
+    for file_name in io.popen(cmd):lines() do
+        _pc("org 0")
+        _pc(string.format("incbin \"res/midi/%s\"", file_name))
+        _pc(string.format("savetrd \"main.trd\", \"%s\", 0, $", file_name))
+    end
+endlua
