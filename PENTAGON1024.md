@@ -28,8 +28,8 @@ This version:
   - **Scorpion ZS-256** — banks 8..15 (via `#1FFD` bit 4 + `#7FFD` low bits)
     → ~192 KB. Probed only if no Pentagon/Profi extended banks were found.
 - The paging scheme can also be forced in **Settings → Memory**
-  (`Auto` / `Pent 128` / `Pent 256` / `Pent 512` / `Pent 1024` / `Profi 1024` /
-  `TS Conf` / `Scorp 256`) — useful when auto-detection misfires on a clone.
+  (`Auto` / `Pent 128` / `Pent 256` / `Scorp 256` / `Pent 512` / `Pent 1024` /
+  `Profi 1024` / `TS Conf`) — useful when auto-detection misfires on a clone.
 - Files that do not fit the detected RAM are rejected at load time instead of
   corrupting memory.
 
