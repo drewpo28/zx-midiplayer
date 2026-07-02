@@ -13,7 +13,8 @@ nemoide     DB
 smuc        DB
 extraram    DB
 memory      DB          ; paging mode: 0=Auto 1=Pent128 2=Pent256 3=Scorp256 4=Pent512 5=Pent1024 6=Profi1024 7=TSConf
-_reserv     BLOCK 256-15, 0
+ploop       DB
+_reserv     BLOCK 256-16, 0
     ENDS
     assert settings_t == trdos_sector_size
 
@@ -223,9 +224,14 @@ settings_menuentry_kempston:
     DW str_off.end
     DW str_auto.end
     DW str_on.end
-
+settings_menuentry_ploop:
+    DB 2
+    DW var_settings.ploop
+    DW str_off.end
+    DW str_on.end
+    
 settings_menu_entries:
-    menugen_t 12
+    menugen_t 13
     menugen_entry_t str_output       settings_menu_val_cb settings_menu_cb settings_menuentry_output
     menugen_entry_t str_memory       settings_menu_val_cb settings_menu_cb settings_menuentry_memory
     menugen_entry_t str_kempston     settings_menu_val_cb settings_menu_cb settings_menuentry_kempston
@@ -236,6 +242,7 @@ settings_menu_entries:
     menugen_entry_t str_divide       settings_menu_val_cb settings_menu_cb settings_menuentry_divide
     menugen_entry_t str_nemoide      settings_menu_val_cb settings_menu_cb settings_menuentry_nemoide
     menugen_entry_t str_smuc         settings_menu_val_cb settings_menu_cb settings_menuentry_smuc
-    ; menugen_entry_t str_extraram     settings_menu_val_cb settings_menu_cb settings_menuentry_extraram
+    menugen_entry_t str_ploop        settings_menu_val_cb settings_menu_cb settings_menuentry_ploop
+;   menugen_entry_t str_extraram     settings_menu_val_cb settings_menu_cb settings_menuentry_extraram
     menugen_entry_t str_save         0 settings_menu_save_cb
     menugen_entry_t str_apply        0 settings_menu_apply_cb

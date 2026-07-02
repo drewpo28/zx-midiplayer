@@ -23,6 +23,7 @@ var_player_state player_state_t
 
 PLAYLIST_NEXT equ 1
 PLAYLIST_PREV equ 2
+PLAYLIST_LOOP equ 4
 var_playlist_flag BYTE 0
 
 var_smf_file smf_file_t
