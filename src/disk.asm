@@ -11,7 +11,8 @@
 file_base_addr equ #c000
 file_page_size equ #4000
 
-; --- Bank paging: Pentagon (#7FFD) or Profi (#7FFD + #DFFD), chosen at runtime ---
+; --- Bank paging: Pentagon (#7FFD), Profi (#7FFD + #DFFD), TS-Conf (#13AF) or ---
+; --- Scorpion (#7FFD + #1FFD bit4), chosen at runtime ---
 ; var_file_pages[index] holds the physical bank NUMBER (0..63) for each 16 KB file page.
 
 ; IN  -  A - physical bank number N (0..63)
@@ -20,10 +21,11 @@ file_page_size equ #4000
 file_set_bank:
     push de                          ;
     ld e, a                          ; E = N (physical bank / page number)
-    ld a, (var_profi_mode)           ; 0=Pentagon, 1=Profi, 2=TS-Conf
+    ld a, (var_profi_mode)           ; 0=Pentagon, 1=Profi, 2=TS-Conf, 3=Scorpion
     dec a : jr z, .profi             ; mode 1 -> Profi
     dec a : jr z, .tsconf            ; mode 2 -> TS-Conf
-.pentagon:                           ; Pentagon 128/512/1024: one #7FFD write
+    dec a : jr z, .scorpion          ; mode 3 -> Scorpion
+.pentagon:                           ; Pentagon 128/256/512/1024: one #7FFD write
     ld a, e                          ;
     call file_bankval                ; A = #7FFD value (D6/D7/D5 encode high bank bits)
     ld bc, #7ffd : out (c), a        ;
@@ -32,6 +34,15 @@ file_set_bank:
 .tsconf:                             ; TS-Conf: Page3 register maps any 16K page into #C000
     ld a, e                          ; A = 8-bit physical page number (0..255 -> up to 4 MB)
     ld bc, #13af : out (c), a        ; write Page3 (#nnAF reg space, reg #13)
+    pop de                           ;
+    ret                              ;
+.scorpion:                           ; Scorpion ZS-256: #7FFD low 3 bits + #1FFD bit4 (RAM ext)
+    ld a, e                          ; #7FFD = ROM(#10) | (N & 7)
+    and 7 : or #10                   ;
+    ld bc, #7ffd : out (c), a        ;
+    ld a, e                          ; #1FFD bit4 = N bit3 (banks 8..15); other bits 0
+    and 8 : add a, a                 ;
+    ld bc, #1ffd : out (c), a        ;
     pop de                           ;
     ret                              ;
 .profi:                              ; Profi 1024: #7FFD low 3 bits + #DFFD page group
@@ -45,16 +56,23 @@ file_set_bank:
     pop de                           ;
     ret                              ;
 
-; Reset the Profi extended page group to 0, so the player's own #7FFD bank writes
-; (e.g. screen_load) address group-0 banks; also invalidate the file page cache
-; because the #C000 mapping is about to change. Harmless on Pentagon/128K.
+; Reset the Profi extended page group (#DFFD) / Scorpion RAM-extension bit (#1FFD)
+; to 0, so the player's own #7FFD bank writes (e.g. screen_load) address the base
+; banks; also invalidate the file page cache because the #C000 mapping is about to
+; change. Harmless on Pentagon/128K.
 ; OUT - AF, BC garbage ; HL, DE preserved
 file_page_reset:
     ld a, #ff                        ; invalidate file_get_next_byte page cache
     ld (file_get_next_byte.pg+1), a  ;
-    ld a, (var_profi_mode)           ; only Profi (#DFFD page groups) needs a group reset
-    cp 1                             ;
+    ld a, (var_profi_mode)           ;
+    cp 1 : jr z, .profi              ; Profi: #DFFD page group -> 0
+    cp 3                             ; Scorpion: #1FFD ext bit -> 0
     ret nz                           ; ... Pentagon/128K/TS-Conf: cache invalidate is enough
+    xor a                            ;
+    ld bc, #1ffd                     ;
+    out (c), a                       ;
+    ret                              ;
+.profi:
     xor a                            ;
     ld bc, #dffd                     ;
     out (c), a                       ;
@@ -186,10 +204,12 @@ detect_tsconf:
 ; 0) TS-Conf first: its Page3 (#13AF) is a clean 8-bit linear pager (up to 4 MB),
 ;    so probe pages 8.. via #13AF. (Probed before #7FFD so we never hit the TS-Conf
 ;    512K-mode where #7FFD bit5 = LOCK rather than a bank bit.)
-; 1) Pentagon banks 8..31 via #7FFD D6/D7 (safe everywhere).
+; 1) Pentagon banks 8..31 via #7FFD D6/D7 (safe everywhere). A Pentagon 256 (D6
+;    only) stops by itself at bank 15 - bank 16 (D7) aliases bank 0 and fails.
 ; 2) If those exist, test for a 1024SL via #EFF7 (above) and, only if confirmed,
 ;    probe banks 32..63 via #7FFD D5 -> full 1 MB. (Never touches D5 on a 512.)
 ; 3) If no Pentagon banks, probe Profi banks 8..63 via #DFFD page groups (no lock bit).
+; 4) If no Profi banks, probe Scorpion 256 banks 8..15 via #1FFD bit4.
 ; On plain 128K nothing extra is found and the 4 base banks (64 KB) remain.
 ; Must run once at init. Clobbers the #C000 window.  OUT - everything garbage
 file_detect_memory:
@@ -199,30 +219,40 @@ file_detect_memory:
     ld (hl), 6 : inc hl              ;
     ld (hl), 3                       ;
     ld a, 4 : ld (var_file_pages_count), a ;
-    xor a : ld (var_profi_mode), a   ; default Pentagon mode (also correct for forced Pent128/512/1024)
+    xor a : ld (var_profi_mode), a   ; default Pentagon mode (also correct for forced Pent128/256/512/1024)
     ld a, (var_settings.memory)      ; forced paging mode? (Settings->Memory; 0 = Auto)
     or a : jr z, .auto               ; ... Auto: probe/detect below
     dec a : jp z, .done              ; 1 = Pent 128: base 4 banks (64 KB) only
-    dec a : jr z, .force512          ; 2 = Pent 512: D6/D7 banks 8..31
-    dec a : jr z, .force_ext         ; 3 = Pent 1024: mode 0 already; D5 banks 8..63
-    dec a : jr nz, .force_ts         ; 5 = TS-Conf   (4 = Profi 1024 falls through)
-    ld a, 1 : ld (var_profi_mode), a ; 4 = Profi 1024 (#DFFD page groups)
+    dec a : jr z, .force256          ; 2 = Pent 256: mode 0 already; D6 banks 8..15
+    dec a : jr z, .force_scorp       ; 3 = Scorp 256 (#7FFD + #1FFD bit4)
+    dec a : jr z, .force512          ; 4 = Pent 512: D6/D7 banks 8..31
+    dec a : jr z, .force_ext         ; 5 = Pent 1024: mode 0 already; D5 banks 8..63
+    dec a : jr z, .force_profi       ; 6 = Profi 1024 (#DFFD page groups)
+    ld a, 2 : ld (var_profi_mode), a ; 7 = TS-Conf (Page3 #13AF)
     jr .force_ext                    ;
-.force_ts:
-    ld a, 2 : ld (var_profi_mode), a ; 5 = TS-Conf (Page3 #13AF)
+.force_scorp:
+    ld a, 3 : ld (var_profi_mode), a ;
+    jr .force256                     ;
+.force_profi:
+    ld a, 1 : ld (var_profi_mode), a ;
 .force_ext:                          ; forced: probe extended banks/pages 8..63 in the chosen mode
     ld c, 8                          ;
 .fe_loop:
     ld a, (var_file_pages_count) : cp FILE_PAGES_MAX : jp nc, .done ;
     ld a, c : push bc : call probe_bank : pop bc : jp nz, .done     ;
     call .append : inc c : jr .fe_loop                             ;
+.force256:                           ; forced Pent 256 / Scorp 256: banks 8..15 only
+    ld b, 16                         ; B = bank cap (survives probe_bank via push/pop)
+    jr .fc_start                     ;
 .force512:                           ; forced Pentagon 512: D6/D7 only (banks 8..31)
+    ld b, 32                         ; stop before the D5 range
+.fc_start:
     ld c, 8                          ;
-.f5_loop:
+.fc_loop:
     ld a, (var_file_pages_count) : cp FILE_PAGES_MAX : jp nc, .done ;
-    ld a, c : cp 32 : jp nc, .done   ; stop before the D5 range
+    ld a, c : cp b : jp nc, .done    ; stop at the mode's bank cap
     ld a, c : push bc : call probe_bank : pop bc : jp nz, .done     ;
-    call .append : inc c : jr .f5_loop                             ;
+    call .append : inc c : jr .fc_loop                             ;
 .auto:
     call detect_tsconf               ; TS-Conf? (Page3 #13AF is a R/W register)
     jr nz, .try_pentagon             ; ... no -> fall through to Pentagon/Profi probing
@@ -230,10 +260,10 @@ file_detect_memory:
     ld c, 8                          ; probe physical pages 8.. (0,4,6,3 are the base banks)
 .ts_loop:
     ld a, (var_file_pages_count)     ;
-    cp FILE_PAGES_MAX : jr nc, .done ;
+    cp FILE_PAGES_MAX : jp nc, .done ;
     ld a, c                          ;
     push bc : call probe_bank : pop bc ;
-    jr nz, .done                     ; first page that isn't real/distinct -> stop
+    jp nz, .done                     ; first page that isn't real/distinct -> stop
     call .append                     ;
     inc c : jr .ts_loop              ;
 .try_pentagon:
@@ -280,7 +310,24 @@ file_detect_memory:
     ld a, (var_file_pages_count)     ;
     cp 4                             ;
     jr nz, .done                     ; found Profi RAM
-    xor a : ld (var_profi_mode), a   ; neither -> plain 128K (64 KB), Pentagon mode
+.try_scorpion:
+    ld a, 3 : ld (var_profi_mode), a ; try Scorpion scheme (#1FFD bit4)
+    ld c, 8                          ;
+.scorp_loop:
+    ld a, (var_file_pages_count)     ;
+    cp FILE_PAGES_MAX : jr nc, .done ;
+    ld a, c : cp 16 : jr nc, .done   ; Scorpion 256: banks 8..15 only
+    ld a, c                          ;
+    push bc : call probe_bank : pop bc ;
+    jr nz, .scorp_end                ;
+    call .append                     ;
+    inc c : jr .scorp_loop           ;
+.scorp_end:
+    ld a, (var_file_pages_count)     ;
+    cp 4                             ;
+    jr nz, .done                     ; found Scorpion RAM
+    xor a : ld (var_profi_mode), a   ; none of them -> plain 128K (64 KB), Pentagon mode
+    ld bc, #1ffd : out (c), a        ; clear #1FFD probe residue (ignored on non-Scorpion)
 .done:
     xor a                            ; restore bank 0 at #C000
     jp file_set_bank                 ;
