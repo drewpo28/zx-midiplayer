@@ -25,6 +25,7 @@ PLAYLIST_NEXT equ 1
 PLAYLIST_PREV equ 2
 PLAYLIST_LOOP equ 4
 var_playlist_flag BYTE 0
+var_rand_state WORD #6ac1                 ; xorshift PRNG state, must stay non-zero
 
 var_smf_file smf_file_t
 
